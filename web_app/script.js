@@ -10,7 +10,155 @@ var GENESIS =
 
 // This is the ABI for your contract (get it from Remix, in the 'Compile' tab)
 // ============================================================
-var abi = []; // FIXME: fill this in with your contract's ABI //Be sure to only have one array, not two
+var abi = [
+  {
+    inputs: [],
+    stateMutability: "nonpayable",
+    type: "constructor",
+  },
+  {
+    inputs: [
+      {
+        internalType: "address",
+        name: "input",
+        type: "address",
+      },
+    ],
+    name: "getAllOwingData",
+    outputs: [
+      {
+        components: [
+          {
+            internalType: "uint256",
+            name: "amount",
+            type: "uint256",
+          },
+          {
+            internalType: "address",
+            name: "owingAddress",
+            type: "address",
+          },
+        ],
+        internalType: "struct Splitwise.OwingData[]",
+        name: "",
+        type: "tuple[]",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "getParticipant",
+    outputs: [
+      {
+        internalType: "address[]",
+        name: "",
+        type: "address[]",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "address",
+        name: "owingAddress",
+        type: "address",
+      },
+      {
+        internalType: "uint256",
+        name: "amount",
+        type: "uint256",
+      },
+    ],
+    name: "iou",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "address",
+        name: "",
+        type: "address",
+      },
+      {
+        internalType: "uint256",
+        name: "",
+        type: "uint256",
+      },
+    ],
+    name: "owing",
+    outputs: [
+      {
+        internalType: "uint256",
+        name: "amount",
+        type: "uint256",
+      },
+      {
+        internalType: "address",
+        name: "owingAddress",
+        type: "address",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "owner",
+    outputs: [
+      {
+        internalType: "address",
+        name: "",
+        type: "address",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "address",
+        name: "",
+        type: "address",
+      },
+    ],
+    name: "participant",
+    outputs: [
+      {
+        internalType: "bool",
+        name: "",
+        type: "bool",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "uint256",
+        name: "",
+        type: "uint256",
+      },
+    ],
+    name: "participantList",
+    outputs: [
+      {
+        internalType: "address",
+        name: "",
+        type: "address",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+]; // FIXME: fill this in with your contract's ABI //Be sure to only have one array, not two
 // ============================================================
 abiDecoder.addABI(abi);
 // call abiDecoder.decodeMethod to use this - see 'getAllFunctionCalls' for more
@@ -29,22 +177,51 @@ var BlockchainSplitwise = new ethers.Contract(
 
 // TODO: Add any helper functions here!
 
-// TODO: Return a list of all users (creditors or debtors) in the system
+// Return a list of all users (creditors or debtors) in the system
 // All users in the system are everyone who has ever sent or received an IOU
-async function getUsers() {}
+async function getUsers() {
+  const participantResult = await BlockchainSplitwise.getParticipant();
+  return participantResult;
+}
 
-// TODO: Get the total amount owed by the user specified by 'user'
-async function getTotalOwed(user) {}
+// Get the total amount owed by the user specified by 'user'
+async function getTotalOwed(user) {
+  const result = await BlockchainSplitwise.getAllOwingData(user);
+
+  let totalOwed = 0;
+  for (let i = 0; i < result.length; i++) {
+    totalOwed = totalOwed + result[i].amount.toNumber();
+  }
+  return totalOwed;
+}
 
 // TODO: Get the last time this user has sent or received an IOU, in seconds since Jan. 1, 1970
 // Return null if you can't find any activity for the user.
 // HINT: Try looking at the way 'getAllFunctionCalls' is written. You can modify it if you'd like.
-async function getLastActive(user) {}
+async function getLastActive(user) {
+  const result = await getAllFunctionCalls(contractAddress, "iou");
 
+  for (let i = 0; i < result.length; i++) {
+    const focusedItem = result[i];
+    if (focusedItem.from == user) {
+      return new Date(focusedItem.t);
+    }
+  }
+  return new Date(0);
+}
 // TODO: add an IOU ('I owe you') to the system
 // The person you owe money is passed as 'creditor'
 // The amount you owe them is passed as 'amount'
-async function add_IOU(creditor, amount) {}
+async function add_IOU(creditor, amount) {
+  var BlockchainSplitwise = new ethers.Contract(
+    contractAddress,
+    abi,
+    provider.getSigner(defaultAccount)
+  );
+
+  const result = await BlockchainSplitwise.iou(creditor, amount);
+  // TODO: Do the BFS to find the cycle.
+}
 
 // =============================================================================
 //                              Provided Functions
