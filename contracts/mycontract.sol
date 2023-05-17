@@ -10,36 +10,22 @@ contract Splitwise {
 
     // ADD YOUR CONTRACT CODE BELOW
     address public owner;
-    mapping(address => bool) public participant;
-    address[] public participantList;
-    mapping(address => OwingData[]) public owing;
 
-    struct OwingData {
+    // For Checking the participant.
+    address[] public participantList;
+    mapping(address => bool) public participant;
+
+    // FOr storing the owing data.
+    mapping(address => Owing[]) owingData;
+
+    struct Owing {
+        bool isOwing;
         uint amount;
         address owingAddress;
     }
 
     constructor() {
         owner = msg.sender;
-    }
-
-    function addOwingData(
-        OwingData[] storage input,
-        address dest,
-        uint amount
-    ) private {
-        for (uint i = 0; i < input.length; i++) {
-            OwingData storage focusedData = input[i];
-            if (focusedData.owingAddress == dest) {
-                focusedData.amount += amount;
-                return;
-            }
-        }
-
-        OwingData memory newOwingData;
-        newOwingData.owingAddress = dest;
-        newOwingData.amount = amount;
-        input.push(newOwingData);
     }
 
     function setParticipant(address input) private {
@@ -56,17 +42,48 @@ contract Splitwise {
 
     function getAllOwingData(
         address input
-    ) public view returns (OwingData[] memory) {
-        return owing[input];
+    ) public view returns (Owing[] memory) {
+        return owingData[input];
     }
 
-    function iou(address owingAddress, uint amount) public {
-        require(msg.sender != owingAddress, "You can't owe yourself!");
-        setParticipant(msg.sender);
-        setParticipant(owingAddress);
+    function iou(address iAddress, address uAddress, uint amount) public {
+        require(iAddress != uAddress, "You can't owe yourself!");
+        setParticipant(iAddress);
+        setParticipant(uAddress);
 
-        OwingData[] storage owingData = owing[msg.sender];
-        addOwingData(owingData, owingAddress, amount);
-        owing[msg.sender] = owingData;
+        // Check if they owe us first. If yes, then reduce the amount - cancel the owing process.
+        for (uint i = 0; i < owingData[uAddress].length; i++) {
+            Owing storage ourOwingData = owingData[uAddress][i];
+            if (ourOwingData.owingAddress == iAddress) {
+                // Update the owing amount
+                if (ourOwingData.amount > amount) {
+                    ourOwingData.amount -= amount;
+                    return;
+                } else if (ourOwingData.amount < amount) {
+                    amount -= ourOwingData.amount;
+                    // Continue the flow since we still owe them.
+                } else {
+                    // Clear out the owing data;
+                    delete owingData[uAddress][i];
+                    return;
+                }
+            }
+        }
+
+        // Check if we have an existing owing them.
+        for (uint i = 0; i < owingData[iAddress].length; i++) {
+            Owing storage theirOwingData = owingData[iAddress][i];
+            if (theirOwingData.owingAddress == uAddress) {
+                theirOwingData.amount += amount;
+                return;
+            }
+        }
+
+        // If not, We add new owing data.
+        Owing memory newOwingData;
+        newOwingData.owingAddress = uAddress;
+        newOwingData.amount = amount;
+
+        owingData[iAddress].push(newOwingData);
     }
 }

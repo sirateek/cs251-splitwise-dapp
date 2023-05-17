@@ -29,6 +29,11 @@ var abi = [
       {
         components: [
           {
+            internalType: "bool",
+            name: "isOwing",
+            type: "bool",
+          },
+          {
             internalType: "uint256",
             name: "amount",
             type: "uint256",
@@ -39,7 +44,7 @@ var abi = [
             type: "address",
           },
         ],
-        internalType: "struct Splitwise.OwingData[]",
+        internalType: "struct Splitwise.Owing[]",
         name: "",
         type: "tuple[]",
       },
@@ -64,7 +69,12 @@ var abi = [
     inputs: [
       {
         internalType: "address",
-        name: "owingAddress",
+        name: "iAddress",
+        type: "address",
+      },
+      {
+        internalType: "address",
+        name: "uAddress",
         type: "address",
       },
       {
@@ -76,35 +86,6 @@ var abi = [
     name: "iou",
     outputs: [],
     stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "address",
-        name: "",
-        type: "address",
-      },
-      {
-        internalType: "uint256",
-        name: "",
-        type: "uint256",
-      },
-    ],
-    name: "owing",
-    outputs: [
-      {
-        internalType: "uint256",
-        name: "amount",
-        type: "uint256",
-      },
-      {
-        internalType: "address",
-        name: "owingAddress",
-        type: "address",
-      },
-    ],
-    stateMutability: "view",
     type: "function",
   },
   {
@@ -163,7 +144,7 @@ var abi = [
 abiDecoder.addABI(abi);
 // call abiDecoder.decodeMethod to use this - see 'getAllFunctionCalls' for more
 
-var contractAddress = "0x5FbDB2315678afecb367f032d93F642f64180aa3"; // FIXME: fill this in with your contract's address/hash
+var contractAddress = "0xf5059a5D33d5853360D16C683c16e67980206f36"; // FIXME: fill this in with your contract's address/hash
 
 var BlockchainSplitwise = new ethers.Contract(
   contractAddress,
@@ -175,7 +156,39 @@ var BlockchainSplitwise = new ethers.Contract(
 //                            Functions To Implement
 // =============================================================================
 
-// TODO: Add any helper functions here!
+// Add any helper functions here!
+async function owingDataAdapter(user) {
+  const result = await BlockchainSplitwise.getAllOwingData(user);
+
+  let newResult = [];
+  for (let i = 0; i < result.length; i++) {
+    newResult.push(result[i].owingAddress);
+  }
+  return newResult;
+}
+
+async function findTheLestAmount(path) {
+  let amount = 0;
+
+  for (let i = 1; i < path.length; i++) {
+    const result = await BlockchainSplitwise.getAllOwingData(path[i - 1]);
+    for (let j = 0; j < result.length; j++) {
+      console.log(
+        "Result: ",
+        result[j].owingAddress,
+        " Focused Path: ",
+        path[i]
+      );
+      if (result[j].owingAddress == path[i]) {
+        if (i == 1 || result[j].amount.toNumber() < amount) {
+          amount = result[j].amount.toNumber();
+        }
+      }
+    }
+  }
+
+  return amount;
+}
 
 // Return a list of all users (creditors or debtors) in the system
 // All users in the system are everyone who has ever sent or received an IOU
@@ -190,12 +203,18 @@ async function getTotalOwed(user) {
 
   let totalOwed = 0;
   for (let i = 0; i < result.length; i++) {
+    console.log(
+      "Owing Address: ",
+      result[i].owingAddress,
+      " Amount: ",
+      result[i].amount.toNumber()
+    );
     totalOwed = totalOwed + result[i].amount.toNumber();
   }
   return totalOwed;
 }
 
-// TODO: Get the last time this user has sent or received an IOU, in seconds since Jan. 1, 1970
+// Get the last time this user has sent or received an IOU, in seconds since Jan. 1, 1970
 // Return null if you can't find any activity for the user.
 // HINT: Try looking at the way 'getAllFunctionCalls' is written. You can modify it if you'd like.
 async function getLastActive(user) {
@@ -209,7 +228,8 @@ async function getLastActive(user) {
   }
   return new Date(0);
 }
-// TODO: add an IOU ('I owe you') to the system
+
+// add an IOU ('I owe you') to the system
 // The person you owe money is passed as 'creditor'
 // The amount you owe them is passed as 'amount'
 async function add_IOU(creditor, amount) {
@@ -219,8 +239,40 @@ async function add_IOU(creditor, amount) {
     provider.getSigner(defaultAccount)
   );
 
-  const result = await BlockchainSplitwise.iou(creditor, amount);
-  // TODO: Do the BFS to find the cycle.
+  try {
+    await BlockchainSplitwise.iou(defaultAccount, creditor, amount);
+  } catch (e) {
+    console.log(e);
+    return;
+  }
+
+  // Do the BFS to find the cycle.
+  const cyclePath = await doBFS(
+    defaultAccount,
+    defaultAccount,
+    owingDataAdapter
+  );
+  if (!cyclePath) {
+    console.log("No cycle path");
+    return;
+  }
+
+  console.log("Cycle Path: ", cyclePath);
+  const leastAmount = await findTheLestAmount(cyclePath);
+  console.log("Least Amount: ", leastAmount);
+
+  // Send iou transaction to clearout the cycle path;
+  for (let i = 1; i < cyclePath.length; i++) {
+    console.log(
+      "I: ",
+      cyclePath[i],
+      " OU: ",
+      cyclePath[i - 1],
+      " Amount: ",
+      leastAmount
+    );
+    await BlockchainSplitwise.iou(cyclePath[i], cyclePath[i - 1], leastAmount);
+  }
 }
 
 // =============================================================================
@@ -244,7 +296,7 @@ async function getAllFunctionCalls(addressOfContract, functionName) {
       if (txn.to == null) {
         continue;
       }
-      if (txn.to.toLowerCase() === addressOfContract.toLowerCase()) {
+      if (txn.to === addressOfContract) {
         var func_call = abiDecoder.decodeMethod(txn.data);
 
         // check that the function getting called in this txn is 'functionName'
@@ -254,7 +306,7 @@ async function getAllFunctionCalls(addressOfContract, functionName) {
             return x.value;
           });
           function_calls.push({
-            from: txn.from.toLowerCase(),
+            from: txn.from,
             args: args,
             t: timeBlock.timestamp,
           });
@@ -271,10 +323,11 @@ async function getAllFunctionCalls(addressOfContract, functionName) {
 // You just need to pass in a function ('getNeighbors') that takes a node (string) and returns its neighbors (as an array)
 async function doBFS(start, end, getNeighbors) {
   var queue = [[start]];
+  let isFirstRound = true;
   while (queue.length > 0) {
     var cur = queue.shift();
     var lastNode = cur[cur.length - 1];
-    if (lastNode.toLowerCase() === end.toString().toLowerCase()) {
+    if (lastNode === end.toString() && !isFirstRound) {
       return cur;
     } else {
       var neighbors = await getNeighbors(lastNode);
@@ -282,6 +335,7 @@ async function doBFS(start, end, getNeighbors) {
         queue.push(cur.concat([neighbors[i]]));
       }
     }
+    isFirstRound = false;
   }
   return null;
 }
@@ -322,14 +376,12 @@ $("#myaccount").change(function () {
 // Allows switching between accounts in 'My Account' and the 'fast-copy' in 'Address of person you owe
 provider.listAccounts().then((response) => {
   var opts = response.map(function (a) {
-    return (
-      '<option value="' + a.toLowerCase() + '">' + a.toLowerCase() + "</option>"
-    );
+    return '<option value="' + a + '">' + a + "</option>";
   });
   $(".account").html(opts);
   $(".wallet_addresses").html(
     response.map(function (a) {
-      return "<li>" + a.toLowerCase() + "</li>";
+      return "<li>" + a + "</li>";
     })
   );
 });
