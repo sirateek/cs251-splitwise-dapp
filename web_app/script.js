@@ -29,14 +29,9 @@ var abi = [
       {
         components: [
           {
-            internalType: "bool",
-            name: "isOwing",
-            type: "bool",
-          },
-          {
-            internalType: "uint256",
+            internalType: "uint32",
             name: "amount",
-            type: "uint256",
+            type: "uint32",
           },
           {
             internalType: "address",
@@ -78,14 +73,38 @@ var abi = [
         type: "address",
       },
       {
-        internalType: "uint256",
+        internalType: "uint32",
         name: "amount",
-        type: "uint256",
+        type: "uint32",
       },
     ],
     name: "iou",
     outputs: [],
     stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "address",
+        name: "debtor",
+        type: "address",
+      },
+      {
+        internalType: "address",
+        name: "creditor",
+        type: "address",
+      },
+    ],
+    name: "lookup",
+    outputs: [
+      {
+        internalType: "uint32",
+        name: "ret",
+        type: "uint32",
+      },
+    ],
+    stateMutability: "view",
     type: "function",
   },
   {
@@ -144,7 +163,7 @@ var abi = [
 abiDecoder.addABI(abi);
 // call abiDecoder.decodeMethod to use this - see 'getAllFunctionCalls' for more
 
-var contractAddress = "0xf5059a5D33d5853360D16C683c16e67980206f36"; // FIXME: fill this in with your contract's address/hash
+var contractAddress = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"; // FIXME: fill this in with your contract's address/hash
 
 var BlockchainSplitwise = new ethers.Contract(
   contractAddress,
@@ -207,9 +226,9 @@ async function getTotalOwed(user) {
       "Owing Address: ",
       result[i].owingAddress,
       " Amount: ",
-      result[i].amount.toNumber()
+      result[i].amount
     );
-    totalOwed = totalOwed + result[i].amount.toNumber();
+    totalOwed = totalOwed + result[i].amount;
   }
   return totalOwed;
 }
@@ -239,12 +258,7 @@ async function add_IOU(creditor, amount) {
     provider.getSigner(defaultAccount)
   );
 
-  try {
-    await BlockchainSplitwise.iou(defaultAccount, creditor, amount);
-  } catch (e) {
-    console.log(e);
-    return;
-  }
+  await BlockchainSplitwise.iou(defaultAccount, creditor, amount);
 
   // Do the BFS to find the cycle.
   const cyclePath = await doBFS(

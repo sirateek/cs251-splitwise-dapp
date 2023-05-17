@@ -19,8 +19,7 @@ contract Splitwise {
     mapping(address => Owing[]) owingData;
 
     struct Owing {
-        bool isOwing;
-        uint amount;
+        uint32 amount;
         address owingAddress;
     }
 
@@ -46,7 +45,21 @@ contract Splitwise {
         return owingData[input];
     }
 
-    function iou(address iAddress, address uAddress, uint amount) public {
+    function lookup(
+        address debtor,
+        address creditor
+    ) public view returns (uint32 ret) {
+        Owing[] memory result = getAllOwingData(debtor);
+        for (uint i = 0; i < result.length; i++) {
+            if (result[i].owingAddress == creditor) {
+                return result[i].amount;
+            }
+        }
+
+        return 0;
+    }
+
+    function iou(address iAddress, address uAddress, uint32 amount) public {
         require(iAddress != uAddress, "You can't owe yourself!");
         setParticipant(iAddress);
         setParticipant(uAddress);
@@ -60,6 +73,7 @@ contract Splitwise {
                     ourOwingData.amount -= amount;
                     return;
                 } else if (ourOwingData.amount < amount) {
+                    delete owingData[uAddress][i];
                     amount -= ourOwingData.amount;
                     // Continue the flow since we still owe them.
                 } else {
